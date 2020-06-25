@@ -52,6 +52,30 @@ const validator = new LocalValidator(BITBOX, async (txids) => {
 );
 const network = new BchdNetwork({BITBOX, client, validator});
 
+// listen for new mints
+let mintFound = false;
+const sseMintQuery = {
+    v: 3,
+    "q": {
+        find: {
+            "slp.valid": true,
+            "slp.detail.transactionType": "MINT",
+            "slp.detail.tokenIdHex": process.env.TOKEN_ID_V1,
+        },
+    },
+};
+const sseb64 = Buffer.from(JSON.stringify(sseMintQuery)).toString("base64");
+const sse = new EventSource(process.env.SLPSOCKET_URL + sseb64);
+sse.onmessage = (e: any) => {
+    const data = JSON.parse(e.data);
+    if (data.type !== "mempool" && data.type !== "block" || data.data.length < 1) {
+        return;
+    }
+
+    mintFound = true;
+};
+
+
 const getRewardAmount = (block: number) => {
     const initReward = parseInt(process.env.TOKEN_INIT_REWARD_V1 as string, 10);
     const halveningInterval = parseInt(process.env.TOKEN_HALVING_INTERVAL_V1 as string, 10);
@@ -59,29 +83,6 @@ const getRewardAmount = (block: number) => {
 };
 
 export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBatonTxid?: string, mintVaultAddressT0?: string }) => {
-
-    // listen for new mints
-    let mintFound = false;
-    const sseMintQuery = {
-        v: 3,
-        "q": {
-            find: {
-                "slp.valid": true,
-                "slp.detail.transactionType": "MINT",
-                "slp.detail.tokenIdHex": process.env.TOKEN_ID_V1,
-            },
-        },
-    };
-    const sseb64 = Buffer.from(JSON.stringify(sseMintQuery)).toString("base64");
-    const sse = new EventSource(process.env.SLPSOCKET_URL + sseb64);
-    sse.onmessage = (e: any) => {
-        const data = JSON.parse(e.data);
-        if (data.type !== "mempool" && data.type !== "block" || data.data.length < 1) {
-            return;
-        }
-
-        mintFound = true;
-    };
 
     // if lastBatonTxid is provided double check it is still unspent
     if (lastBatonTxid) {
@@ -357,6 +358,7 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
         // sse early exit so we can try again
         if (mintFound) {
             console.log(`Token reward has been found, solution forfeited for ${lastBatonTxid} (on sse).`);
+            mintFound = false;
             return {};
         }
 
