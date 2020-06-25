@@ -127,7 +127,12 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
         console.log(`Fetching current minting baton location...`);
         console.log(`SLPDB query: ${process.env.SLPDB_URL + b64}`);
         const res = await fetch(process.env.SLPDB_URL + b64);
-        const graphResjson = await res.json();
+        let graphResjson = null;
+        try {
+            graphResjson = await res.json();
+        } catch (e) {
+            throw Error("JSON parse failed");
+        }
 
         if (graphResjson.g.length !== 1) {
             throw Error("Cannot find current contract tip!");
@@ -176,7 +181,13 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
             await sleep(10000);
             continue;
         }
-        const confResJson = await res.json();
+        let confResJson = null;
+        try {
+            confResJson = await res.json();
+        } catch (e) {
+            await sleep(10000);
+            continue;
+        }
         if (confResJson.c.length === 1) {
             txn = confResJson.c[0];
         } else if (confResJson.u.length === 1) {
