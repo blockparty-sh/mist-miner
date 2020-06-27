@@ -15,6 +15,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const BITBOX = new BITBOXSDK();
 const slp = new Slp(BITBOX);
 const txnHelpers = new TransactionHelpers(slp);
+export const fs = require("fs");
+export const jsonFile = require("jsonfile");
 
 import bchaddr from "bchaddrjs-slp";
 const Bitcore = require("bitcoincashjs-lib-p2sh");
@@ -30,20 +32,24 @@ const minerSlpAddress = Utils.toSlpAddress(minerBchAddress);
 const vaultHexTail = process.env.MINER_COVENANT_V1!;
 const TOKEN_START_BLOCK = parseInt(process.env.TOKEN_START_BLOCK_V1 as string, 10);
 
-const txCache = new Map<string, Buffer>();
+export class TxCache {
+ 	public static txCache = new Map<string, Buffer>();
+}
 
 // setup a new local SLP validator
 const validator = new LocalValidator(BITBOX, async (txids) => {
         let txnBuf;
         try {
-            if (txCache.has(txids[0])) {
+            if (TxCache.txCache.has(txids[0])) {
                 console.log(`Cache txid: ${txids[0]}`);
-                return [ txCache.get(txids[0])!.toString("hex") ];
+                return [ TxCache.txCache.get(txids[0])!.toString("hex") ];
             }
             console.log(`Downloading txid: ${txids[0]}`);
             const res = await client.getRawTransaction({ hash: txids[0], reversedHashOrder: true });
             txnBuf = Buffer.from(res.getTransaction_asU8());
-            txCache.set(txids[0], txnBuf);
+            TxCache.txCache.set(txids[0], txnBuf);
+	    let txCacheJson = mapToJson(TxCache.txCache);
+ 	    writeJsonToFile(txCacheJson);
         } catch (err) {
             throw Error(`[ERROR] Could not get transaction ${txids[0]} in local validator: ${err}`);
         }
@@ -75,6 +81,37 @@ sse.onmessage = (e: any) => {
     mintFound = true;
 };
 
+export function doesTxsFileExist() {
+ 	return fs.existsSync("txs.json");
+ }
+
+ export function writeJsonToFile(jsonStr: string) {
+ 	jsonFile.writeFile('txs.json', JSON.parse(jsonStr));
+ }
+
+ export function readTxsToJsonString(callback: Function) {
+ 	fs.readFile('./txs.json', callback);
+ }
+
+ export function mapToJson(map: Map<string, Buffer>) {
+   let jsonObject: any = {};  
+   map.forEach((value, key) => {  
+       jsonObject[key] = value  
+   });
+   let json = <JSON>jsonObject;
+   return JSON.stringify(json);
+ }
+
+ export function jsonToMap(jsonStr: string) {
+   let jsonObj = JSON.parse(jsonStr);
+   let map = new Map<string, Buffer>();
+   for (let key in jsonObj) {
+      let val = jsonObj[key];
+      var buf = Buffer.from(val["data"]);
+      map.set(key, buf);
+    }
+   return map;
+ }
 
 const getRewardAmount = (block: number) => {
     const initReward = parseInt(process.env.TOKEN_INIT_REWARD_V1 as string, 10);

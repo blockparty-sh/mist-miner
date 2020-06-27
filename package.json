@@ -20,7 +20,8 @@
     "eventsource": "^1.0.7",
     "grpc-bchrpc-node": "^0.10.0",
     "node-fetch": "^2.6.0",
-    "slpjs": "0.27.2"
+    "slpjs": "0.27.2",
+    "jsonfile": "6.0.1"
   },
   "devDependencies": {
     "@types/mocha": "^5.1.1",
