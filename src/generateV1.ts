@@ -33,7 +33,7 @@ const vaultHexTail = process.env.MINER_COVENANT_V1!;
 const TOKEN_START_BLOCK = parseInt(process.env.TOKEN_START_BLOCK_V1 as string, 10);
 
 export class TxCache {
-	public static txCache = new Map<string, Buffer>();
+ 	public static txCache = new Map<string, Buffer>();
 }
 
 // setup a new local SLP validator
@@ -49,7 +49,7 @@ const validator = new LocalValidator(BITBOX, async (txids) => {
             txnBuf = Buffer.from(res.getTransaction_asU8());
             TxCache.txCache.set(txids[0], txnBuf);
 	    let txCacheJson = mapToJson(TxCache.txCache);
-	    writeJsonToFile(txCacheJson);
+ 	    writeJsonToFile(txCacheJson);
         } catch (err) {
             throw Error(`[ERROR] Could not get transaction ${txids[0]} in local validator: ${err}`);
         }
@@ -58,68 +58,68 @@ const validator = new LocalValidator(BITBOX, async (txids) => {
 );
 const network = new BchdNetwork({BITBOX, client, validator});
 
+// listen for new mints
+let mintFound = false;
+const sseMintQuery = {
+    v: 3,
+    "q": {
+        find: {
+            "slp.valid": true,
+            "slp.detail.transactionType": "MINT",
+            "slp.detail.tokenIdHex": process.env.TOKEN_ID_V1,
+        },
+    },
+};
+const sseb64 = Buffer.from(JSON.stringify(sseMintQuery)).toString("base64");
+const sse = new EventSource(process.env.SLPSOCKET_URL + sseb64);
+sse.onmessage = (e: any) => {
+    const data = JSON.parse(e.data);
+    if (data.type !== "mempool" && data.type !== "block" || data.data.length < 1) {
+        return;
+    }
+
+    mintFound = true;
+};
+
+export function doesTxsFileExist() {
+ 	return fs.existsSync("txs.json");
+ }
+
+ export function writeJsonToFile(jsonStr: string) {
+ 	jsonFile.writeFile('txs.json', JSON.parse(jsonStr));
+ }
+
+ export function readTxsToJsonString(callback: Function) {
+ 	fs.readFile('./txs.json', callback);
+ }
+
+ export function mapToJson(map: Map<string, Buffer>) {
+   let jsonObject: any = {};  
+   map.forEach((value, key) => {  
+       jsonObject[key] = value  
+   });
+   let json = <JSON>jsonObject;
+   return JSON.stringify(json);
+ }
+
+ export function jsonToMap(jsonStr: string) {
+   let jsonObj = JSON.parse(jsonStr);
+   let map = new Map<string, Buffer>();
+   for (let key in jsonObj) {
+      let val = jsonObj[key];
+      var buf = Buffer.from(val["data"]);
+      map.set(key, buf);
+    }
+   return map;
+ }
+
 const getRewardAmount = (block: number) => {
     const initReward = parseInt(process.env.TOKEN_INIT_REWARD_V1 as string, 10);
     const halveningInterval = parseInt(process.env.TOKEN_HALVING_INTERVAL_V1 as string, 10);
     return initReward / (Math.floor(block / halveningInterval) + 1);
 };
 
-export function doesTxsFileExist() {
-	return fs.existsSync("txs.json");
-}
-
-export function writeJsonToFile(jsonStr: string) {
-	jsonFile.writeFile('txs.json', JSON.parse(jsonStr));
-}
-
-export function readTxsToJsonString(callback: Function) {
-	fs.readFile('./txs.json', callback);
-}
-
-export function mapToJson(map: Map<string, Buffer>) {
-  let jsonObject: any = {};  
-  map.forEach((value, key) => {  
-      jsonObject[key] = value  
-  });
-  let json = <JSON>jsonObject;
-  return JSON.stringify(json);
-}
-
-export function jsonToMap(jsonStr: string) {
-  let jsonObj = JSON.parse(jsonStr);
-  let map = new Map<string, Buffer>();
-  for (let key in jsonObj) {
-     let val = jsonObj[key];
-     var buf = Buffer.from(val["data"]);
-     map.set(key, buf);
-   }
-  return map;
-}
-
 export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBatonTxid?: string, mintVaultAddressT0?: string }) => {
-
-    // listen for new mints
-    let mintFound = false;
-    const sseMintQuery = {
-        v: 3,
-        "q": {
-            find: {
-                "slp.valid": true,
-                "slp.detail.transactionType": "MINT",
-                "slp.detail.tokenIdHex": process.env.TOKEN_ID_V1,
-            },
-        },
-    };
-    const sseb64 = Buffer.from(JSON.stringify(sseMintQuery)).toString("base64");
-    const sse = new EventSource(process.env.SLPSOCKET_URL + sseb64);
-    sse.onmessage = (e: any) => {
-        const data = JSON.parse(e.data);
-        if (data.type !== "mempool" && data.type !== "block" || data.data.length < 1) {
-            return;
-        }
-
-        mintFound = true;
-    };
 
     // if lastBatonTxid is provided double check it is still unspent
     if (lastBatonTxid) {
@@ -164,16 +164,20 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
         const b64 = Buffer.from(JSON.stringify(batonQuery)).toString("base64");
         console.log(`Fetching current minting baton location...`);
         console.log(`SLPDB query: ${process.env.SLPDB_URL + b64}`);
-        const res = await fetch(process.env.SLPDB_URL + b64);
+        let res = undefined;
         let graphResjson = null;
-        try {
-            graphResjson = await res.json();
-        } catch (e) {
-            throw Error("JSON parse failed");
-        }
-
-        if (graphResjson.g.length !== 1) {
-            throw Error("Cannot find current contract tip!");
+        while (! res) {
+            try {
+                res = await fetch(process.env.SLPDB_URL + b64);
+                graphResjson = await res.json();
+                if (graphResjson.g.length !== 1) {
+                    throw Error("Cannot find current contract tip!");
+                }
+            } catch (e) {
+                console.log(e);
+                res = undefined;
+                await sleep(10000);
+            }
         }
 
         const g = graphResjson.g[0];
@@ -395,6 +399,7 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
         // sse early exit so we can try again
         if (mintFound) {
             console.log(`Token reward has been found, solution forfeited for ${lastBatonTxid} (on sse).`);
+            mintFound = false;
             return {};
         }
 
