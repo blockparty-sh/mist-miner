@@ -73,12 +73,16 @@ const sseMintQuery = {
 const sseb64 = Buffer.from(JSON.stringify(sseMintQuery)).toString("base64");
 const sse = new EventSource(process.env.SLPSOCKET_URL + sseb64);
 sse.onmessage = (e: any) => {
-    const data = JSON.parse(e.data);
-    if (data.type !== "mempool" && data.type !== "block" || data.data.length < 1) {
-        return;
-    }
+    try {
+    	const data = JSON.parse(e.data);
+    	if (data.type !== "mempool" && data.type !== "block" || data.data.length < 1) {
+        	return;
+    	}
 
-    mintFound = true;
+    	mintFound = true;
+    } catch (e) {
+	//Fail silently
+    }
 };
 
 export function doesTxsFileExist() {
