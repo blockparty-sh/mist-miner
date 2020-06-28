@@ -142,27 +142,69 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
     let bchBlockHeight: number;
     if (!lastBatonTxid) {
         const batonQuery = {
-            v: 3,
-            "q": {
-                db: ["g"],
-                "aggregate": [
-                    { $match: {
-                        "tokenDetails.tokenIdHex": process.env.TOKEN_ID_V1 as string,
-                        "graphTxn.outputs": {$elemMatch: {status: "BATON_UNSPENT"}}},
-                    },
-                    { $project: { graphTxn: 1, context: "SLPDB" }},
-                    {
-                        $lookup: {
-                            from: "statuses",
-                            localField: "context",
-                            "foreignField": "context",
-                            as: "status",
-                        },
-                    },
-                    { $project: { "graphTxn": 1, "status.bchBlockHeight": 1} },
-                ],
-                limit: 10,
-            },
+          "v": 3,
+          "q": {
+            "db": [
+              "g"
+            ],
+            "aggregate": [
+              {
+                "$match": {
+                  "tokenDetails.tokenIdHex": process.env.TOKEN_ID_V1 as string,
+                  "graphTxn.outputs": {
+                    "$elemMatch": {
+                      "status": "BATON_UNSPENT"
+                    }
+                  }
+                }
+              },
+              {
+                "$project": {
+                  "graphTxn": 1,
+                  "context": "SLPDB"
+                }
+              },
+              {
+                "$lookup": {
+                  "from": "statuses",
+                  "localField": "context",
+                  "foreignField": "context",
+                  "as": "status"
+                }
+              },
+              {
+                "$lookup": {
+                  "from": "confirmed",
+                  "localField": "graphTxn.txid",
+                  "foreignField": "tx.h",
+                  "as": "txc"
+                }
+              },
+              {
+                "$lookup": {
+                  "from": "unconfirmed",
+                  "localField": "graphTxn.txid",
+                  "foreignField": "tx.h",
+                  "as": "txu"
+                }
+              },
+              {
+                "$match": {
+                  "$or": [
+                    {"txc": {"$size": 1 }},
+                    {"txu": {"$size": 1 }}
+                  ]
+                }
+              },
+              {
+                "$project": {
+                  "graphTxn": 1,
+                  "status.bchBlockHeight": 1
+                }
+              }
+            ],
+            "limit": 10
+          }
         };
 
         const b64 = Buffer.from(JSON.stringify(batonQuery)).toString("base64");
