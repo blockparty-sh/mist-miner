@@ -93,9 +93,7 @@ export function doesTxsFileExist() {
  	jsonFile.writeFile('txs.json', JSON.parse(jsonStr));
  }
 
- export function readTxsToJsonString(callback: Function) {
- 	fs.readFile('./txs.json', callback);
- }
+const readTxsToJsonString = () => fs.readFileSync('./txs.json');
 
  export function mapToJson(map: Map<string, Buffer>) {
    let jsonObject: any = {};  
@@ -116,6 +114,10 @@ export function doesTxsFileExist() {
     }
    return map;
  }
+
+console.log("Loading TxCache from JSON file...");
+TxCache.txCache = jsonToMap(readTxsToJsonString());
+console.log("Done");
 
 const getRewardAmount = (block: number) => {
     const initReward = parseInt(process.env.TOKEN_INIT_REWARD_V1 as string, 10);
