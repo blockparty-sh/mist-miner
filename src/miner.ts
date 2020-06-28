@@ -9,27 +9,24 @@ import { readTxsToJsonString } from "./generateV1";
 import { doesTxsFileExist } from "./generateV1";
 import { TxCache } from "./generateV1";
 
+if(doesTxsFileExist()) {
+    console.log(`Loading cached txs...`);
+    try {
+        TxCache.txCache = jsonToMap(readTxsToJsonString());
+    } catch (e) {
+        console.log(e);
+    }
+}
+
 const run = async () => {
     let state: any = {};
     while (true) {
-	try {
-        	state = await generateV1(state);
-	} catch(e) {
-	}
+        try {
+            state = await generateV1(state);
+        } catch(e) {
+        }
     }
 };
 
-if(doesTxsFileExist()) {
-console.log(`Loading cached txs...`);
-let jsonString = "";
-readTxsToJsonString(function (err: string, data: string) {
-    if (err) {
-        throw err;
-    }
-    jsonString = data;
-    let jsonMap = jsonToMap(jsonString)
-    TxCache.txCache = jsonMap;
-});
-}
 
 run();

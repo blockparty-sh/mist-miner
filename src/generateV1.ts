@@ -33,7 +33,7 @@ const vaultHexTail = process.env.MINER_COVENANT_V1!;
 const TOKEN_START_BLOCK = parseInt(process.env.TOKEN_START_BLOCK_V1 as string, 10);
 
 export class TxCache {
- 	public static txCache = new Map<string, Buffer>();
+     public static txCache = new Map<string, Buffer>();
 }
 
 // setup a new local SLP validator
@@ -48,8 +48,8 @@ const validator = new LocalValidator(BITBOX, async (txids) => {
             const res = await client.getRawTransaction({ hash: txids[0], reversedHashOrder: true });
             txnBuf = Buffer.from(res.getTransaction_asU8());
             TxCache.txCache.set(txids[0], txnBuf);
-	    let txCacheJson = mapToJson(TxCache.txCache);
- 	    writeJsonToFile(txCacheJson);
+            const txCacheJson = mapToJson(TxCache.txCache);
+            writeJsonToFile(txCacheJson);
         } catch (err) {
             throw Error(`[ERROR] Could not get transaction ${txids[0]} in local validator: ${err}`);
         }
@@ -74,37 +74,39 @@ const sseb64 = Buffer.from(JSON.stringify(sseMintQuery)).toString("base64");
 const sse = new EventSource(process.env.SLPSOCKET_URL + sseb64);
 sse.onmessage = (e: any) => {
     try {
-    	const data = JSON.parse(e.data);
-    	if (data.type !== "mempool" && data.type !== "block" || data.data.length < 1) {
-        	return;
-    	}
+        const data = JSON.parse(e.data);
+        if (data.type !== "mempool" && data.type !== "block" || data.data.length < 1) {
+            return;
+        }
 
-    	mintFound = true;
+        mintFound = true;
     } catch (e) {
-	//Fail silently
+        // Fail silently
     }
 };
 
 export function doesTxsFileExist() {
- 	return fs.existsSync("txs.json");
- }
+    return fs.existsSync("txs.json");
+}
 
- export function writeJsonToFile(jsonStr: string) {
- 	jsonFile.writeFile('txs.json', JSON.parse(jsonStr));
- }
+export function writeJsonToFile(jsonStr: string) {
+    jsonFile.writeFile('txs.json', JSON.parse(jsonStr));
+}
 
-const readTxsToJsonString = () => fs.readFileSync('./txs.json');
+export function readTxsToJsonString() {
+    return fs.readFileSync('./txs.json');
+}
 
- export function mapToJson(map: Map<string, Buffer>) {
+export function mapToJson(map: Map<string, Buffer>) {
    let jsonObject: any = {};  
    map.forEach((value, key) => {  
        jsonObject[key] = value  
    });
    let json = <JSON>jsonObject;
    return JSON.stringify(json);
- }
+}
 
- export function jsonToMap(jsonStr: string) {
+export function jsonToMap(jsonStr: string) {
    let jsonObj = JSON.parse(jsonStr);
    let map = new Map<string, Buffer>();
    for (let key in jsonObj) {
@@ -113,17 +115,13 @@ const readTxsToJsonString = () => fs.readFileSync('./txs.json');
       map.set(key, buf);
     }
    return map;
- }
+}
 
-console.log("Loading TxCache from JSON file...");
-TxCache.txCache = jsonToMap(readTxsToJsonString());
-console.log("Done");
-
-const getRewardAmount = (block: number) => {
+function getRewardAmount(block: number) {
     const initReward = parseInt(process.env.TOKEN_INIT_REWARD_V1 as string, 10);
     const halveningInterval = parseInt(process.env.TOKEN_HALVING_INTERVAL_V1 as string, 10);
     return initReward / (Math.floor(block / halveningInterval) + 1);
-};
+}
 
 export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBatonTxid?: string, mintVaultAddressT0?: string }) => {
 
