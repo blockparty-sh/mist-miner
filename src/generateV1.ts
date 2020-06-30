@@ -133,6 +133,15 @@ export function jsonToMap(jsonStr: string) {
    return map;
 }
 
+try {
+    console.log("Loading TxCache from JSON file...");
+    TxCache.txCache = jsonToMap(readTxsToJsonString());
+    console.log("Done");
+} catch (e) {
+    console.log(e);
+}
+
+
 function getRewardAmount(block: number) {
     const initReward = parseInt(process.env.TOKEN_INIT_REWARD_V1 as string, 10);
     const halveningInterval = parseInt(process.env.TOKEN_HALVING_INTERVAL_V1 as string, 10);
@@ -311,11 +320,13 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
             // unique case when mining for token height 1
             _bestTokenHeight = 0;
         }
+        /*
         if (_bestTokenHeight >= (bchBlockHeight - TOKEN_START_BLOCK)) {
             txn = undefined;
             console.log("Token height is synchronized with block height, waiting for next block...");
             await sleep(10000);
         }
+        */
     }
 
     let bestTokenHeight: number;
@@ -446,7 +457,6 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
     const difficulty = parseInt(process.env.MINER_DIFFICULTY_V1 as string, 10);
     const prehash = Buffer.concat([scriptPreImage, crypto.randomBytes(4)]);
     let solhash = BITBOX.Crypto.hash256(prehash);
-    let count = 0;
 
     console.log(`Mining height: ${bestTokenHeight + 1} (baton txid: ${lastBatonTxid})`);
     console.log("Please wait, mining for Mist...");
@@ -464,18 +474,6 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
             mintFound = false;
             return {};
         }
-
-        // since sse doesn't always work, we check manually every so often
-        if (count === 0 || count === 100000) {
-            try {
-                await client.getUnspentOutput({ hash: lastBatonTxid!, vout: 2, reversedHashOrder: true, includeMempool: true });
-            } catch (_) {
-                console.log(`Token reward has been found, solution forfeited for ${lastBatonTxid} (on interval check).`);
-                return {};
-            }
-            count = 0;
-        }
-        count++;
     }
 
     // after mining, check if its already spent again
@@ -519,6 +517,8 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
     console.log(`scriptPubKeyHex T1: ${scriptPubKeyHexT1}`);
     console.log(`redeem Script Buf T1: ${redeemScriptBufT1.toString("hex")}`);
     console.log(signedTxn);
+
+    process.exit(1);
 
     // submit our signed solution
     try {
