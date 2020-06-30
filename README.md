@@ -138,6 +138,6 @@ IE your `bitcoin.conf` should have this:
 
 Install zeromq package:
 
-`npm i zeromq`
+`npm i zeromq@4.6.0`
 
 In `.env` set `BLOCK_NOTIFIER` to `zmq`
