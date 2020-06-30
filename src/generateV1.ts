@@ -185,6 +185,7 @@ function getRewardAmount(block: number) {
 }
 
 export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBatonTxid?: string, mintVaultAddressT0?: string }) => {
+    mintFound = false;
     let block_found = false;
     if (process.env.BLOCK_NOTIFIER === 'zmq') {
       const zmq = require('zeromq')
