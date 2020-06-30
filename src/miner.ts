@@ -24,6 +24,7 @@ const run = async () => {
         try {
             state = await generateV1(state);
         } catch(e) {
+            console.log(e);
         }
     }
 };
