@@ -9,8 +9,42 @@ import { BchdNetwork, LocalValidator,
          ScriptSigP2PK, ScriptSigP2PKH, ScriptSigP2SH,
          Slp, SlpAddressUtxoResult, TransactionHelpers,
          Utils} from "slpjs";
+const zmq = require('zeromq')
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const childProcess = require("child_process");
+function execute(command: any) {
+  /**
+   * @param {Function} resolve A function that resolves the promise
+   * @param {Function} reject A function that fails the promise
+   * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+   */
+  return new Promise(function(resolve, reject) {
+    /**
+     * @param {Error} error An error triggered during the execution of the childProcess.exec command
+     * @param {string|Buffer} standardOutput The result of the shell command execution
+     * @param {string|Buffer} standardError The error resulting of the shell command execution
+     * @see https://nodejs.org/api/child_process.html#child_process_child_process_exec_command_options_callback
+     */
+    childProcess.exec(command, function(error: any, standardOutput: any, standardError: any) {
+      if (error) {
+        reject();
+
+        return;
+      }
+
+      if (standardError) {
+        reject(standardError);
+
+        return;
+      }
+
+      resolve(standardOutput);
+    });
+  });
+}
+
 
 const BITBOX = new BITBOXSDK();
 const slp = new Slp(BITBOX);
@@ -22,7 +56,7 @@ import bchaddr from "bchaddrjs-slp";
 const Bitcore = require("bitcoincashjs-lib-p2sh");
 
 import { GrpcClient } from "grpc-bchrpc-node";
-const client = new GrpcClient();
+const client = new GrpcClient({ url: process.env.BCHD_URL });
 
 const minerWif: string = process.env.WIF!;
 const minerPubKey = (new ECPair().fromWIF(minerWif)).getPublicKeyBuffer();
@@ -49,7 +83,7 @@ const validator = new LocalValidator(BITBOX, async (txids) => {
         let txnBuf;
         try {
             if (TxCache.txCache.has(txids[0])) {
-                console.log(`Cache txid: ${txids[0]}`);
+                // console.log(`Cache txid: ${txids[0]}`);
                 return [ TxCache.txCache.get(txids[0])!.toString("hex") ];
             }
             console.log(`Downloading txid: ${txids[0]}`);
@@ -101,6 +135,9 @@ sse.onmessage = (e: any) => {
     }
 };
 
+
+
+
 export function doesTxsFileExist() {
     return fs.existsSync("txs.json");
 }
@@ -149,6 +186,19 @@ function getRewardAmount(block: number) {
 }
 
 export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBatonTxid?: string, mintVaultAddressT0?: string }) => {
+    let block_found = false;
+    let sock = zmq.socket('sub');
+    sock.connect('tcp://127.0.0.1:28332');
+    sock.subscribe('hashblock')
+    console.log('ZMQ Connected')
+
+    sock.on('message', async function(topic: any, msg: any) {
+      if (topic.toString() === 'hashblock') {
+        const hash = msg.toString('hex')
+        console.log('New block hash from ZMQ = ', hash)
+        block_found = true;
+      }
+    });
 
     // if lastBatonTxid is provided double check it is still unspent
     if (lastBatonTxid) {
@@ -234,7 +284,7 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
 
         const b64 = Buffer.from(JSON.stringify(batonQuery)).toString("base64");
         console.log(`Fetching current minting baton location...`);
-        console.log(`SLPDB query: ${process.env.SLPDB_URL + b64}`);
+        // console.log(`SLPDB query: ${process.env.SLPDB_URL + b64}`);
         let res = undefined;
         let graphResjson = null;
         while (! res) {
@@ -264,11 +314,11 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
         bchBlockHeight = (await client.getBlockchainInfo()).getBestHeight();
     }
 
-    console.log(`Current baton location: ${lastBatonTxid}:2`);
-    console.log(`Blockchain height: ${bchBlockHeight}`);
+    // console.log(`Current baton location: ${lastBatonTxid}:2`);
+    // console.log(`Blockchain height: ${bchBlockHeight}`);
 
-    console.log(`Reward txo: ${lastBatonTxid}:2`);
-    console.log(`Reward address: ${mintVaultAddressT0}`);
+    // console.log(`Reward txo: ${lastBatonTxid}:2`);
+    // console.log(`Reward address: ${mintVaultAddressT0}`);
 
     // examine the transaction to determine the current state
     const rewardQuery = {
@@ -320,13 +370,6 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
             // unique case when mining for token height 1
             _bestTokenHeight = 0;
         }
-        /*
-        if (_bestTokenHeight >= (bchBlockHeight - TOKEN_START_BLOCK)) {
-            txn = undefined;
-            console.log("Token height is synchronized with block height, waiting for next block...");
-            await sleep(10000);
-        }
-        */
     }
 
     let bestTokenHeight: number;
@@ -356,9 +399,9 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
     const redeemScriptBufT0 = Buffer.from(mintVaultHexT0, "hex");
     const vaultHash160 = BITBOX.Crypto.hash160(redeemScriptBufT0);
     const vaultAddressT0 = Utils.slpAddressFromHash160(vaultHash160, "mainnet", "p2sh");
-    console.log(`T0 redeemScript:\n${mintVaultHexT0}`);
+    // console.log(`T0 redeemScript:\n${mintVaultHexT0}`);
     const scriptPubKeyHexT0 = "a914" + Buffer.from(bchaddr.decodeAddress(vaultAddressT0).hash).toString("hex") + "87";
-    console.log(`T0 scriptPubKey:\n${scriptPubKeyHexT0}`);
+    // console.log(`T0 scriptPubKey:\n${scriptPubKeyHexT0}`);
 
     if (mintVaultAddressT0 !== vaultAddressT0) {
         throw Error("Mismatch contract address for t0, unknown error.");
@@ -375,9 +418,9 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
     const redeemScriptBufT1 = Buffer.from(mintVaultHexT1, "hex");
     const vaultHash160T1 = BITBOX.Crypto.hash160(redeemScriptBufT1);
     const vaultAddressT1 = Utils.slpAddressFromHash160(vaultHash160T1, "mainnet", "p2sh");
-    console.log(`T1 redeemScript:\n${mintVaultHexT1}`);
+    // console.log(`T1 redeemScript:\n${mintVaultHexT1}`);
     const scriptPubKeyHexT1 = "a914" + Buffer.from(bchaddr.decodeAddress(vaultAddressT1).hash).toString("hex") + "87";
-    console.log(`T1 scriptPubKey:\n${scriptPubKeyHexT1}`);
+    // console.log(`T1 scriptPubKey:\n${scriptPubKeyHexT1}`);
 
     // get unspent UTXOs
     console.log(`Getting unspent txos for ${minerBchAddress}`);
@@ -461,27 +504,43 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
     console.log(`Mining height: ${bestTokenHeight + 1} (baton txid: ${lastBatonTxid})`);
     console.log("Please wait, mining for Mist...");
 
-    while (!solhash.slice(0, difficulty).toString("hex").split("").every((s) => s === "0")) {
-        prehash[0 + scriptPreImage.length] = Math.floor(Math.random() * 255);
-        prehash[1 + scriptPreImage.length] = Math.floor(Math.random() * 255);
-        prehash[2 + scriptPreImage.length] = Math.floor(Math.random() * 255);
-        prehash[3 + scriptPreImage.length] = Math.floor(Math.random() * 255);
-        solhash = BITBOX.Crypto.hash256(prehash);
-
-        // sse early exit so we can try again
+    let keepTrying = true;
+    while (keepTrying) {
+        // exit so we can try again
         if (mintFound) {
-            console.log(`Token reward has been found, solution forfeited for ${lastBatonTxid} (on sse).`);
-            mintFound = false;
-            return {};
+            console.log("Miner exited early since token reward has been found.");
+            return false;
         }
-    }
+        console.log('Trying...');
+        const cmd = process.cwd() + '/fastmine/fastmine '+ scriptPreImage.toString('hex') + ' ' + difficulty;
+        const content =  await execute(cmd) as string;
+        const lines = content.split("\n");
+        if (lines.length == 0) {
+            continue;
+        }
 
-    // after mining, check if its already spent again
-    try {
-        await client.getUnspentOutput({ hash: lastBatonTxid!, vout: 2, reversedHashOrder: true, includeMempool: true });
-    } catch (_) {
-        console.log(`Token reward has been found, solution forfeited for ${lastBatonTxid} (post-mine forfeit).`);
-        return {};
+        for (const line of lines) {
+            if (line.split(' ')[0] !== 'FOUND') {
+                console.log(line);
+                continue;
+            }
+
+            const bytes = Buffer.from(line.split(' ')[1], 'hex');
+            prehash[prehash.length - 4] = bytes[0];
+            prehash[prehash.length - 3] = bytes[1];
+            prehash[prehash.length - 2] = bytes[2];
+            prehash[prehash.length - 1] = bytes[3];
+            solhash = BITBOX.Crypto.hash256(prehash);
+
+            if (solhash[0] != 0x00 || solhash[1] != 0x00 || solhash[2] != 0x00) {
+                console.log('Something went wrong with fastmine');
+                continue;
+            } else {
+                console.log('Found!');
+                keepTrying = false;
+                break;
+            }
+        }
     }
 
     const mintAmountLE = Buffer.alloc(4);
@@ -518,16 +577,26 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
     console.log(`redeem Script Buf T1: ${redeemScriptBufT1.toString("hex")}`);
     console.log(signedTxn);
 
-    process.exit(1);
+    console.log('Waiting for block...');
+    while (! block_found) {
+        await sleep(1);
+    }
 
     // submit our signed solution
     try {
-        const txres = await client.submitTransaction({txnHex: signedTxn});
-        lastBatonTxid = Buffer.from(txres.getHash_asU8().reverse()).toString("hex");
+        const txid = await electrum.request('blockchain.transaction.broadcast', signedTxn);
+        if (typeof txid !== 'string') {
+            console.log(txid);
+            throw new Error('tx rejected');
+        }
+        console.log(`Submitted solution in txid: ${txid}`);
+        lastBatonTxid = txid;
         mintVaultAddressT0 = vaultAddressT1;
-        console.log(`Submitted solution in txid: ${lastBatonTxid}`);
-        return { lastBatonTxid, mintVaultAddressT0 };
-    } catch (_) {}
+        return { lastBatonTxid, vaultAddressT1 };
+    } catch (e) {
+        console.log(e);
+
+    }
     console.log(`Token reward has been found, solution forfeited for ${lastBatonTxid} (failed submit txn).`);
     return {};
 };
