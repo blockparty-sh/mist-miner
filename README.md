@@ -125,3 +125,19 @@ This will build the application and begin mining Mist!
 If there are updates in the future you can update by running:
 
 `git pull origin master`
+
+## Block Notifier
+
+### ZMQ
+
+You need a full node for this to connect to, with hashblock on port 28332.
+
+IE your `bitcoin.conf` should have this:
+
+`zmqpubhashblock=tcp://127.0.0.1:28332`
+
+Install zeromq package:
+
+`npm i zeromq`
+
+In `.env` set `BLOCK_NOTIFIER` to `zmq`

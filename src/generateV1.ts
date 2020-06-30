@@ -9,7 +9,6 @@ import { BchdNetwork, LocalValidator,
          ScriptSigP2PK, ScriptSigP2PKH, ScriptSigP2SH,
          Slp, SlpAddressUtxoResult, TransactionHelpers,
          Utils} from "slpjs";
-const zmq = require('zeromq')
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -187,18 +186,21 @@ function getRewardAmount(block: number) {
 
 export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBatonTxid?: string, mintVaultAddressT0?: string }) => {
     let block_found = false;
-    let sock = zmq.socket('sub');
-    sock.connect('tcp://127.0.0.1:28332');
-    sock.subscribe('hashblock')
-    console.log('ZMQ Connected')
+    if (process.env.BLOCK_NOTIFIER === 'zmq') {
+      const zmq = require('zeromq')
+      let sock = zmq.socket('sub');
+      sock.connect('tcp://127.0.0.1:28332');
+      sock.subscribe('hashblock')
+      console.log('ZMQ Connected')
 
-    sock.on('message', async function(topic: any, msg: any) {
-      if (topic.toString() === 'hashblock') {
-        const hash = msg.toString('hex')
-        console.log('New block hash from ZMQ = ', hash)
-        block_found = true;
-      }
-    });
+      sock.on('message', async function(topic: any, msg: any) {
+        if (topic.toString() === 'hashblock') {
+          const hash = msg.toString('hex')
+          console.log('New block hash from ZMQ = ', hash)
+          block_found = true;
+        }
+      });
+    }
 
     // if lastBatonTxid is provided double check it is still unspent
     if (lastBatonTxid) {
