@@ -298,7 +298,7 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
 
         const b64 = Buffer.from(JSON.stringify(batonQuery)).toString("base64");
         console.log(`Fetching current minting baton location...`);
-        // console.log(`SLPDB query: ${process.env.SLPDB_URL + b64}`);
+        console.log(`SLPDB query: ${process.env.SLPDB_URL + b64}`);
         let res = undefined;
         let graphResjson = null;
         while (! res) {
@@ -372,6 +372,7 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
         } else {
             console.log("Waiting for SLPDB to update...");
             await sleep(500);
+            return false;
         }
 
         let _bestTokenHeight: number;
@@ -518,42 +519,59 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
     console.log(`Mining height: ${bestTokenHeight + 1} (baton txid: ${lastBatonTxid})`);
     console.log("Please wait, mining for Mist...");
 
-    let keepTrying = true;
-    while (keepTrying) {
-        // exit so we can try again
-        if (mintFound) {
-            console.log("Miner exited early since token reward has been found.");
-            return false;
-        }
-        console.log('Trying...');
-        const cmd = process.cwd() + '/fastmine/fastmine '+ scriptPreImage.toString('hex') + ' ' + difficulty;
-        const content =  await execute(cmd) as string;
-        const lines = content.split("\n");
-        if (lines.length == 0) {
-            continue;
-        }
-
-        for (const line of lines) {
-            if (line.split(' ')[0] !== 'FOUND') {
-                console.log(line);
+    if (process.env.USE_FASTMINE === 'yes') {
+        let keepTrying = true;
+        while (keepTrying) {
+            // exit so we can try again
+            if (mintFound) {
+                console.log("Miner exited early since token reward has been found.");
+                return false;
+            }
+            console.log('Trying...');
+            const cmd = process.cwd() + '/fastmine/fastmine '+ scriptPreImage.toString('hex') + ' ' + difficulty;
+            const content =  await execute(cmd) as string;
+            const lines = content.split("\n");
+            if (lines.length == 0) {
                 continue;
             }
 
-            const bytes = Buffer.from(line.split(' ')[1], 'hex');
-            prehash[prehash.length - 4] = bytes[0];
-            prehash[prehash.length - 3] = bytes[1];
-            prehash[prehash.length - 2] = bytes[2];
-            prehash[prehash.length - 1] = bytes[3];
+            for (const line of lines) {
+                if (line.split(' ')[0] !== 'FOUND') {
+                    console.log(line);
+                    continue;
+                }
+
+                const bytes = Buffer.from(line.split(' ')[1], 'hex');
+                prehash[prehash.length - 4] = bytes[0];
+                prehash[prehash.length - 3] = bytes[1];
+                prehash[prehash.length - 2] = bytes[2];
+                prehash[prehash.length - 1] = bytes[3];
+                solhash = BITBOX.Crypto.hash256(prehash);
+
+                if (solhash[0] != 0x00 || solhash[1] != 0x00 || solhash[2] != 0x00) {
+                    console.log('Something went wrong with fastmine');
+                    continue;
+                } else {
+                    console.log('Found!');
+                    keepTrying = false;
+                    break;
+                }
+            }
+        }
+    } else {
+        while (!solhash.slice(0, difficulty).toString("hex").split("").every((s) => s === "0")) {
+            prehash[0 + scriptPreImage.length] = Math.floor(Math.random() * 255);
+            prehash[1 + scriptPreImage.length] = Math.floor(Math.random() * 255);
+            prehash[2 + scriptPreImage.length] = Math.floor(Math.random() * 255);
+            prehash[3 + scriptPreImage.length] = Math.floor(Math.random() * 255);
             solhash = BITBOX.Crypto.hash256(prehash);
-
-            if (solhash[0] != 0x00 || solhash[1] != 0x00 || solhash[2] != 0x00) {
-                console.log('Something went wrong with fastmine');
-                continue;
-            } else {
-                console.log('Found!');
-                keepTrying = false;
-                break;
-            }
+    
+            // sse early exit so we can try again
+           if (mintFound) {
+               console.log(`Token reward has been found, solution forfeited for ${lastBatonTxid} (on sse).`);
+               mintFound = false;
+               return {};
+           }
         }
     }
 

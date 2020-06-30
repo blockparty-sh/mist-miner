@@ -47,18 +47,7 @@ Paste this into the terminal:
 
 `npm install`
 
-
-### 7. Build fastminer
-
-Ensure you have recent C++ compiler and `make`
-
-`cd fastmine`
-
-`make`
-
-`cd ..`
-
-### 8. Set up Electron Cash SLP Edition Mining Wallet
+### 7. Set up Electron Cash SLP Edition Mining Wallet
 
 Open Electron Cash SLP Edition and create a new normal wallet
 
@@ -78,7 +67,7 @@ Paste your private key inside the quotes so that it looks like this: `WIF="Kansa
 
 Save the file and close the editor.
 
-### 9. Fund the Mining Wallet
+### 8. Fund the Mining Wallet
 
 Inside Electron Cash SLP again, right click the address at index 0 again and click on "Copy address"
 
@@ -112,7 +101,7 @@ Then click "Sign" and then "Broadcast"
 
 You can now close this wallet.
 
-### 10. Start Mining
+### 9. Start Mining
 
 Inside the terminal type:
 
@@ -120,7 +109,7 @@ Inside the terminal type:
 
 This will build the application and begin mining Mist!
 
-### 11. Updating the Miner
+### 10. Updating the Miner
 
 If there are updates in the future you can update by running:
 
@@ -141,3 +130,17 @@ Install zeromq package:
 `npm i zeromq@4.6.0`
 
 In `.env` set `BLOCK_NOTIFIER` to `zmq`
+
+### fastminer
+
+Ensure you have recent C++ compiler and `make`
+
+`cd fastmine`
+
+`make`
+
+`cd ..`
+
+Then set in `.env`
+
+`USE_FASTMINE="yes"`
