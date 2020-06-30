@@ -150,9 +150,9 @@ export function readTxsToJsonString() {
 }
 
 export function mapToJson(map: Map<string, Buffer>) {
-   let jsonObject: any = {};  
-   map.forEach((value, key) => {  
-       jsonObject[key] = value  
+   let jsonObject: any = {};
+   map.forEach((value, key) => {
+       jsonObject[key] = value
    });
    let json = <JSON>jsonObject;
    return JSON.stringify(json);
@@ -193,12 +193,23 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
       sock.subscribe('hashblock')
       console.log('ZMQ Connected')
 
-      sock.on('message', async function(topic: any, msg: any) {
+      sock.on('message', async (topic: any, msg: any) => {
         if (topic.toString() === 'hashblock') {
           const hash = msg.toString('hex')
           console.log('New block hash from ZMQ = ', hash)
           block_found = true;
         }
+      });
+    }
+    if (process.env.BLOCK_NOTIFIER === 'bchd') {
+      const sub = await client.subscribeBlocks({
+        includeSerializedBlock: false,
+        includeTxnData: false,
+        includeTxnHashes: false,
+      });
+      sub.on("data", async (data: any) => {
+        block_found = true;
+        console.log(`Block found: ${data.getBlockInfo()!.getHeight()}`);
       });
     }
 
