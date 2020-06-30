@@ -32,6 +32,14 @@ const minerSlpAddress = Utils.toSlpAddress(minerBchAddress);
 const vaultHexTail = process.env.MINER_COVENANT_V1!;
 const TOKEN_START_BLOCK = parseInt(process.env.TOKEN_START_BLOCK_V1 as string, 10);
 
+const ElectrumClient = require("electrum-cash").Client;
+const electrum = new ElectrumClient("Mist Miner", "1.4.1", process.env.ELECTRUMX_URL);
+const sp = require("synchronized-promise");
+const electrumReadySync = sp(async () => { await electrum.connect(); });
+console.log("Waiting for electrum cluster...");
+electrumReadySync();
+
+
 export class TxCache {
      public static txCache = new Map<string, Buffer>();
 }
@@ -45,8 +53,16 @@ const validator = new LocalValidator(BITBOX, async (txids) => {
                 return [ TxCache.txCache.get(txids[0])!.toString("hex") ];
             }
             console.log(`Downloading txid: ${txids[0]}`);
-            const res = await client.getRawTransaction({ hash: txids[0], reversedHashOrder: true });
-            txnBuf = Buffer.from(res.getTransaction_asU8());
+
+            try {
+                const res = await client.getRawTransaction({ hash: txids[0], reversedHashOrder: true });
+                txnBuf = Buffer.from(res.getTransaction_asU8());
+            } catch (e) {
+                console.log('transaction not found in bchd, trying electrum');
+                const transactionHex = await electrum.request("blockchain.transaction.get", txids[0]);
+                txnBuf = Buffer.from(transactionHex, 'hex');
+            }
+
             TxCache.txCache.set(txids[0], txnBuf);
             const txCacheJson = mapToJson(TxCache.txCache);
             writeJsonToFile(txCacheJson);
