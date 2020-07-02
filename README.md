@@ -49,7 +49,9 @@ Paste this into the terminal:
 
 ### 7. Set up Electron Cash SLP Edition Mining Wallet
 
-Open Electron Cash SLP Edition and create a new normal wallet
+Open Electron Cash **SLP Edition** and create a new normal wallet
+
+https://simpleledger.cash/project/electron-cash-slp-edition/
 
 Inside the wallet Click on the "Addresses" pane
 
@@ -57,7 +59,7 @@ Right click on the index 0 address and click on "Private key"
 
 Copy the Private key (Command+c) (⌘ key) 
 
-Open the `.env` file by typing this into the terminal:
+Open the `.env` file (not example.env) by typing this into the terminal:
 
 `open -a TextEdit .env`
 
