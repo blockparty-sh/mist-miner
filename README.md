@@ -150,7 +150,7 @@ Then set in `.env`
 
 ## Setup Instructions (Docker; cross-platform)
 
-Clone the repo as per above instructions, setup your .env file and fund your wallet in the same way
+Clone the repo as per above instructions, setup your .env file and fund your wallet in the same way. No need to install Homebrew, NodeJS, npm modules etc.
 
 ### Install Docker
 
