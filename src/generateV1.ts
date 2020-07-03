@@ -65,10 +65,18 @@ const minerSlpAddress = Utils.toSlpAddress(minerBchAddress);
 const vaultHexTail = process.env.MINER_COVENANT_V1!;
 const TOKEN_START_BLOCK = parseInt(process.env.TOKEN_START_BLOCK_V1 as string, 10);
 
-const ElectrumClient = require("electrum-cash").Client;
-const electrum = new ElectrumClient("Mist Miner", "1.4.1", process.env.ELECTRUMX_URL);
+const ElectrumCluster = require("electrum-cash").Cluster;
+const electrum = new ElectrumCluster("Mist Miner", "1.4.1", 2, 3, ElectrumCluster.ORDER.RANDOM);
+
+electrum.addServer(process.env.ELECTRUMX_URL);
+electrum.addServer('bch.imaginary.cash');
+electrum.addServer('electroncash.de');
+electrum.addServer('electroncash.dk');
+electrum.addServer('electron.jochen-hoenicke.de', 51002);
+electrum.addServer('electrum.imaginary.cash');
+
 const sp = require("synchronized-promise");
-const electrumReadySync = sp(async () => { await electrum.connect(); });
+const electrumReadySync = sp(async () => { await electrum.ready(); });
 console.log("Waiting for electrum cluster...");
 electrumReadySync();
 
@@ -494,7 +502,7 @@ export const generateV1 = async ({ lastBatonTxid, mintVaultAddressT0 }: { lastBa
 
     // set nSequence to enable CLTV for all inputs, and set transaction Locktime
     unsignedMintHex = txnHelpers.enableInputsCLTV(unsignedMintHex);
-    unsignedMintHex = txnHelpers.setTxnLocktime(unsignedMintHex, bchBlockHeight);
+    unsignedMintHex = txnHelpers.setTxnLocktime(unsignedMintHex, bchBlockHeight + 1);
 
     // Build scriptSig
     const batonTxo = baton.slpBatonUtxos[process.env.TOKEN_ID_V1!][0];
