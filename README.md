@@ -146,3 +146,22 @@ Ensure you have recent C++ compiler and `make`
 Then set in `.env`
 
 `USE_FASTMINE="yes"`
+
+
+## Setup Instructions (Docker; cross-platform)
+
+Clone the repo as per above instructions, setup your .env file and fund your wallet in the same way. No need to install Homebrew, NodeJS, npm modules etc.
+
+### Install Docker
+
+https://docs.docker.com/engine/install/
+
+### Build Docker Image
+
+Run `docker build -t mistminer .` from the root of the repo.
+
+### Run miner
+
+Run `docker run mistminer` to run the miner in a Docker container. `docker ps` will show you all running containers.
+
+Note: Unsure how to get this playing well with zeromq running on the host machine; I've only run successfully without using zmq.
