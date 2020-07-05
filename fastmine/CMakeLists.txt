@@ -11,13 +11,6 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-add_executable(fastmine fastmine.cpp sha2.c)
-
-# Require pthread
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
-target_link_libraries(fastmine PRIVATE Threads::Threads)
-
 if (MSVC)
     # warning level 4
     set(CMAKE_CXX_FLAGS "/W4")
@@ -32,3 +25,14 @@ else()
     set(CMAKE_CXX_FLAGS_DEBUG "-g")
     set(CMAKE_C_FLAGS_DEBUG "-g")
 endif()
+
+add_executable(fastmine fastmine.cpp)
+add_subdirectory(config)
+add_subdirectory(crypto)
+
+target_link_libraries(fastmine PRIVATE crypto)
+
+# Require pthread
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+target_link_libraries(fastmine PRIVATE Threads::Threads)
