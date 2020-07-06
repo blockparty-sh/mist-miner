@@ -1,145 +1,171 @@
-#include <vector>
+#include <algorithm>
 #include <array>
+#include <atomic>
+#include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
-#include <algorithm>
-#include <cmath>
 #include <iostream>
-#include <random>
-#include <chrono>
 #include <limits>
+#include <mutex>
+#include <random>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <thread>
-#include <atomic>
+#include <type_traits>
+#include <vector>
 
 #include "sha2.h"
 
-constexpr size_t MAX_RUNS = 10000000;
+#if defined(__clang__) || defined(__GNUC__)
+#define EXPECT(expr, constant) __builtin_expect(expr, constant)
+#else
+#define EXPECT(expr, constant) (expr)
+#endif
+
+#define LIKELY(bool_expr)   EXPECT(int(bool(bool_expr)), 1)
+#define UNLIKELY(bool_expr) EXPECT(int(bool(bool_expr)), 0)
+
+constexpr unsigned MAX_RUNS = 10'000'000;
 std::atomic_bool found = false;
 
 struct xorshift32_state {
     uint32_t a;
 
-	xorshift32_state(uint32_t a)
-	: a(a)
-	{}
+    explicit constexpr xorshift32_state(uint32_t a) noexcept : a(a) {}
+    xorshift32_state() = delete;
+
+    constexpr void shift32() noexcept {
+        a ^= a << 13;
+        a ^= a >> 17;
+        a ^= a << 5;
+    }
 };
 
-uint32_t xorshift32(xorshift32_state& state)
+template <typename Container,
+          typename = std::enable_if_t<sizeof(typename Container::value_type) == 1>>
+std::vector<uint8_t> unhex(const Container& v)
 {
-	uint32_t x = state.a;
-	x ^= x << 13;
-	x ^= x >> 17;
-	x ^= x << 5;
-	return state.a = x;
-}
+    const auto retSize = unsigned(v.size() / 2);
+    std::vector<uint8_t> ret(retSize);
 
-
-template <typename Container>
-std::vector<uint8_t> unhex(const Container& v_)
-{
-    std::vector<uint8_t> ret(v_.size() / 2); 
-
-    for (unsigned i=0; i<ret.size(); ++i) {
-        const char p1 = v_[(i<<1)+0];
-        const char p2 = v_[(i<<1)+1];
-        ret[i] = ((p1 <= '9' ? p1 - '0' : p1 - 'a' + 10) << 4)
-               +  (p2 <= '9' ? p2 - '0' : p2 - 'a' + 10);
+    for (unsigned i = 0; i < retSize; ++i) {
+        const uint8_t p1 = uint8_t(v[i*2 + 0]);
+        const uint8_t p2 = uint8_t(v[i*2 + 1]);
+        ret[i] =   uint8_t(( (p1 <= '9' ? p1 - '0' : p1 - 'a' + 10) << 4) & 0xf0)
+                 | uint8_t((  p2 <= '9' ? p2 - '0' : p2 - 'a' + 10)       & 0x0f);
     }
 
     return ret;
 }
 
-template <typename Container>
+template <typename Container,
+          typename = std::enable_if_t<sizeof(typename Container::value_type) == 1>>
 std::string hex(const Container& v)
 {
-    constexpr std::array<std::uint8_t, 16> chars = { 
+    constexpr std::array<char, 16> chars = {
         '0', '1', '2', '3', '4', '5', '6', '7',                                                    
         '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' 
     };  
- 
-    std::string ret(v.size()*2, '\0');
-    for (unsigned i=0; i<v.size(); ++i) {
-        ret[(i<<1)+0] = chars[v[i] >> 4]; 
-        ret[(i<<1)+1] = chars[v[i] & 0x0F];
+    const auto vSize = unsigned(v.size());
+    std::string ret(vSize*2, '\0');
+    for (unsigned i=0; i<vSize; ++i) {
+        ret[i*2 + 0] = chars[(uint8_t(v[i]) >> 4) & 0xf];
+        ret[i*2 + 1] = chars[uint8_t(v[i]) & 0x0F];
     }   
  
     return ret;
 }
 
-void mine(std::random_device & rd, const size_t difficulty, std::vector<uint8_t> prehash)
+void mine(std::random_device::result_type seed, unsigned difficulty, std::vector<uint8_t> prehash)
 {
-	std::default_random_engine gen(rd());
-	std::uniform_int_distribution<uint32_t> dist(0, std::numeric_limits<uint32_t>::max());
+    constexpr auto kSha256Len = size_t(SHA256_DIGEST_SIZE);
+    difficulty = std::min(difficulty, unsigned(kSha256Len));
+    const auto prehashLen = prehash.size();
+    if (UNLIKELY(prehashLen < 4))
+        throw std::runtime_error("Prehash must be at least 4 bytes!");
+    std::default_random_engine gen(seed);
+    std::uniform_int_distribution<uint32_t> dist(1, std::numeric_limits<uint32_t>::max());
 
-    std::vector<std::uint8_t> solhash(32);
-	xorshift32_state state(dist(gen));
-	// std::cout << state.a << "\n";
+    std::vector<std::uint8_t> solhash(kSha256Len);
+    xorshift32_state state(dist(gen));
+    // std::cout << state.a << "\n";
 
-	for (size_t i=0; i<MAX_RUNS; ++i) {
-        if (i % 0x100 == 0 && found) {
+    auto * const prehashTail = prehash.data() + (prehashLen-4);
+
+    for (unsigned i = 0; LIKELY(i < MAX_RUNS && !found.load(std::memory_order::memory_order_relaxed)); ++i) {
+
+        // shift the nonce around
+        state.shift32();
+
+        prehashTail[0] = (state.a >> 0)  & 0xff;
+        prehashTail[1] = (state.a >> 8)  & 0xff;
+        prehashTail[2] = (state.a >> 16) & 0xff;
+        prehashTail[3] = (state.a >> 24) & 0xff;
+
+        sha256(prehash.data(), prehashLen, solhash.data());
+        sha256(solhash.data(), kSha256Len, solhash.data());
+        // std::cout << hex(solhash) << "\n";
+        for (unsigned d = 0; d < difficulty; ++d) {
+            if (solhash[d] != 0x00) {
+                // we use goto here to avoid an extra branch below
+                goto not_found;
+            }
+        }
+        // solution found, print, then break out of loop
+        {
+            found = true;
+            using UInt8View = std::basic_string_view<uint8_t>;
+            const auto hexSuffix = hex(UInt8View(prehashTail, 4));
+            const auto hexSolHash = hex(solhash);
+            const auto hexPrehash = hex(prehash);
+            {
+                // ensures the below is synchronized so that reader process
+                // doesn't get interleaved results in extremely unlucky cases
+                static std::mutex coutMutex;
+                std::unique_lock guard(coutMutex);
+                std::cout << "FOUND " << hexSuffix << '\n';
+                // std::cout << "found " << state.a << "\n";
+                std::cout << "SOLHASH " << hexSolHash << '\n';
+                std::cout << "PREHASH " << hexPrehash << '\n';
+            }
+            // std::cout << i << " runs\n";
             break;
         }
-		xorshift32(state);
-
-        prehash[prehash.size() - 4] = (state.a >> (0))  & 0xff;
-        prehash[prehash.size() - 3] = (state.a >> (8))  & 0xff;
-        prehash[prehash.size() - 2] = (state.a >> (16)) & 0xff;
-        prehash[prehash.size() - 1] = (state.a >> (24)) & 0xff;
-
-        sha256(prehash.data(), prehash.size(), solhash.data());
-        sha256(solhash.data(), solhash.size(), solhash.data());
-		// std::cout << hex(solhash) << "\n";
-
-        for (size_t d=0; d<difficulty; ++d) {
-            if (solhash[d] != 0x00) {
-				goto cont;
-			}
-        }
-
-        std::cout << "FOUND " << hex(std::vector<uint8_t>{
-            prehash[prehash.size() - 4],
-            prehash[prehash.size() - 3],
-            prehash[prehash.size() - 2],
-            prehash[prehash.size() - 1]
-        }) << "\n";
-        // std::cout << "found " << state.a << "\n";
-		std::cout << "SOLHASH " << hex(solhash) << "\n";
-		std::cout << "PREHASH " << hex(prehash) << "\n";
-		// std::cout << i << " runs\n";
-        found = true;
-        break;
-cont:
-		continue;
+    not_found:
+        // solution not found, keep looping
+        continue;
     }
 }
 
 int main(int argc, char * argv[]) {
-	if (argc < 2) {
-		std::cerr << "need preimage\n";
-		return EXIT_FAILURE;
-	}
-	if (argc < 3) {
-		std::cerr << "need difficulty\n";
-		return EXIT_FAILURE;
-	}
-	std::vector<uint8_t> preimage = unhex(std::string(argv[1]));
-    // std::cout << "PREIMAGE " << hex(preimage) << "\n";
+    if (argc < 2 || !argv[1][0]) {
+        std::cerr << "need preimage\n";
+        return EXIT_FAILURE;
+    }
+    if (argc < 3 || !argv[2][0]) {
+        std::cerr << "need difficulty\n";
+        return EXIT_FAILURE;
+    }
+    std::vector<uint8_t> prehash = unhex(std::string_view(argv[1]));
+    // std::cout << "PREIMAGE " << hex(prehash) << "\n";
 
-    const size_t difficulty = argv[2][0]-'0';
-	// std::cout << "difficulty: " << difficulty << "\n";
+    const unsigned difficulty = argv[2][0]-'0';
+    // std::cout << "difficulty: " << difficulty << "\n";
 
-    std::vector<std::uint8_t> prehash = preimage;
-	prehash.resize(prehash.size() + 4);
+    prehash.resize(prehash.size() + 4);
 
-	std::random_device rd;
-	std::vector<std::thread> thds;
-	for (size_t i=0; i<10; ++i) {
-		thds.push_back(std::thread(mine,  std::ref(rd), difficulty, prehash));
-	}
-
-	for (auto & t : thds) {
-		t.join();
-	}
+    const auto nThreads = std::thread::hardware_concurrency();
+    std::random_device rd;
+    std::vector<std::thread> thds;
+    thds.reserve(nThreads);
+    for (unsigned i=0; i<nThreads; ++i) {
+        thds.emplace_back(mine,  rd(), difficulty, prehash);
+    }
+    for (auto & t : thds) {
+        t.join();
+    }
 
     return EXIT_SUCCESS;
 }
