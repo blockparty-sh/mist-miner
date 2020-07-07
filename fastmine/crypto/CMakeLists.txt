@@ -1,4 +1,5 @@
 # Copyright (c) 2017-2019 The Bitcoin developers
+cmake_minimum_required(VERSION 3.12.4)
 
 project(crypto)
 
