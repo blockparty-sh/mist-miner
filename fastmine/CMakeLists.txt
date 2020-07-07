@@ -2,6 +2,13 @@ cmake_minimum_required(VERSION 3.5)
 
 project(fastmine LANGUAGES CXX C)
 
+message(STATUS "Operating system is ${CMAKE_SYSTEM_NAME} ${CMAKE_SYSTEM_VERSION}")
+message(STATUS "The host processor is ${CMAKE_HOST_SYSTEM_PROCESSOR}")
+
+if (MSVC)
+    message(FATAL_ERROR "Building for MSVC is not supported. Please use MinGW Makefiles and GCC on Windows.")
+endif()
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
@@ -36,3 +43,9 @@ target_link_libraries(fastmine PRIVATE crypto)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 target_link_libraries(fastmine PRIVATE Threads::Threads)
+
+# On Windows we static link to get a stand-alone .exe
+if (WIN32)
+    target_link_options(fastmine PUBLIC -static)
+endif()
+
